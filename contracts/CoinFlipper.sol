@@ -12,10 +12,10 @@ import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "./VRFConsumer.sol";
 
 contract CoinFlipper is
-OwnableUpgradeable,
-ERC1155Holder,
-ERC721Holder,
-VRFConsumer
+	OwnableUpgradeable,
+	ERC1155Holder,
+	ERC721Holder,
+	VRFConsumer
 {
 	// ---------- Contract Variables ----------
 
@@ -37,22 +37,22 @@ VRFConsumer
 
 	mapping(uint16 configId => CoinFlipConfig config) public coinFlipConfigs;
 	mapping(uint16 configId => mapping(uint256 index => uint256 id))
-	public tokenOfConfigByIndex;
+		public tokenOfConfigByIndex;
 	mapping(bytes32 reqHash => VRFCoinFlipData data) public coinFlipData;
 	mapping(address player => uint256 winStreak) public playersWinStreak;
 	struct History {
 		uint256 totalPlay;
-		bool[] playLog;
-		uint256 countWining;
+		mapping(uint256 => bool) playLog;
+		uint256 countWinning;
 	}
 	mapping(address player => History) public playHistory;
 
 	bool coinFlipPaused;
 	address degenRewardToken;
 	address immutable roninTreasuryAddress =
-	0x22cEfc91E9b7c0f3890eBf9527EA89053490694e;
+		0x22cEfc91E9b7c0f3890eBf9527EA89053490694e;
 	address immutable mokuTreasuryAddress =
-	0xeC702628F44C31aCc56C3A59555be47e1f16eB1e;
+		0xeC702628F44C31aCc56C3A59555be47e1f16eB1e;
 
 	// ---------- Events ----------
 
@@ -181,9 +181,9 @@ VRFConsumer
 
 		uint256 value = IRoninVRFCoordinatorForConsumers(vrfCoordinator)
 			.estimateRequestRandomFee(
-			500000, // TODO -> need more accurate
-			20 gwei
-		);
+				500000, // TODO -> need more accurate
+				20 gwei
+			);
 
 		bytes32 reqHash = _requestRandomness(value, 500000, 20 gwei, address(this));
 
@@ -249,9 +249,8 @@ VRFConsumer
 	}
 
 	function _addHistory(address _address, bool win) internal {
-		playHistory[_address].totalPlay += 1;
-		playHistory[_address].playLog.push(win);
-		if (win) playHistory[_address].countWining += 1;
+		playHistory[_address].playLog[playHistory[_address].totalPlay++] = win;
+		if (win) playHistory[_address].countWinning += 1;
 	}
 
 	// ---------------- Send Fee to Treasury pool ------------------
@@ -321,7 +320,7 @@ VRFConsumer
 			// we delete this ID from our index of tokens
 			if (randomIndex != config.supply) {
 				tokenOfConfigByIndex[_data.configId][
-				randomIndex
+					randomIndex
 				] = tokenOfConfigByIndex[_data.configId][config.supply];
 			}
 			delete tokenOfConfigByIndex[_data.configId][config.supply];
