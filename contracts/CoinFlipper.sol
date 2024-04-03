@@ -12,10 +12,10 @@ import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "./VRFConsumer.sol";
 
 contract CoinFlipper is
-	OwnableUpgradeable,
-	ERC1155Holder,
-	ERC721Holder,
-	VRFConsumer
+OwnableUpgradeable,
+ERC1155Holder,
+ERC721Holder,
+VRFConsumer
 {
 	// ---------- Contract Variables ----------
 
@@ -37,12 +37,22 @@ contract CoinFlipper is
 
 	mapping(uint16 configId => CoinFlipConfig config) public coinFlipConfigs;
 	mapping(uint16 configId => mapping(uint256 index => uint256 id))
-		public tokenOfConfigByIndex;
+	public tokenOfConfigByIndex;
 	mapping(bytes32 reqHash => VRFCoinFlipData data) public coinFlipData;
 	mapping(address player => uint256 winStreak) public playersWinStreak;
+	struct History {
+		uint256 totalPlay;
+		bool[] playLog;
+		uint256 countWining;
+	}
+	mapping(address player => History) public playHistory;
 
 	bool coinFlipPaused;
 	address degenRewardToken;
+	address immutable roninTreasuryAddress =
+	0x22cEfc91E9b7c0f3890eBf9527EA89053490694e;
+	address immutable mokuTreasuryAddress =
+	0xeC702628F44C31aCc56C3A59555be47e1f16eB1e;
 
 	// ---------- Events ----------
 
@@ -171,9 +181,9 @@ contract CoinFlipper is
 
 		uint256 value = IRoninVRFCoordinatorForConsumers(vrfCoordinator)
 			.estimateRequestRandomFee(
-				500000, // TODO -> need more accurate
-				20 gwei
-			);
+			500000, // TODO -> need more accurate
+			20 gwei
+		);
 
 		bytes32 reqHash = _requestRandomness(value, 500000, 20 gwei, address(this));
 
@@ -221,10 +231,14 @@ contract CoinFlipper is
 		if (result == userChoice) {
 			_giveAsset(data, _randomSeed);
 			playersWinStreak[data.player] += 1;
+			_addHistory(data.player, true);
 		} else {
 			_addToConfigPool(data);
 			playersWinStreak[data.player] = 0;
+			_addHistory(data.player, false);
 		}
+
+		_sendTreasuryFee(data);
 
 		emit CoinFlipResolved(
 			data.player,
@@ -232,6 +246,37 @@ contract CoinFlipper is
 			_reqHash,
 			result == userChoice
 		);
+	}
+
+	function _addHistory(address _address, bool win) internal {
+		playHistory[_address].totalPlay += 1;
+		playHistory[_address].playLog.push(win);
+		if (win) playHistory[_address].countWining += 1;
+	}
+
+	// ---------------- Send Fee to Treasury pool ------------------
+
+	function _sendTreasuryFee(VRFCoinFlipData storage _data) internal {
+		CoinFlipConfig storage config = coinFlipConfigs[_data.configId];
+		uint256 configType = config.tokenType;
+
+		if (configType == 1) {
+			payable(mokuTreasuryAddress).transfer(
+				_calculateFee(config.tokenAmount, 3)
+			);
+			payable(roninTreasuryAddress).transfer(
+				_calculateFee(config.tokenAmount, 1)
+			);
+		} else if (configType == 20) {
+			IERC20(config.tokenAddress).transfer(
+				mokuTreasuryAddress,
+				_calculateFee(config.tokenAmount, 3)
+			);
+			IERC20(config.tokenAddress).transfer(
+				roninTreasuryAddress,
+				_calculateFee(config.tokenAmount, 1)
+			);
+		}
 	}
 
 	// ---------- Private functions ----------
@@ -276,7 +321,7 @@ contract CoinFlipper is
 			// we delete this ID from our index of tokens
 			if (randomIndex != config.supply) {
 				tokenOfConfigByIndex[_data.configId][
-					randomIndex
+				randomIndex
 				] = tokenOfConfigByIndex[_data.configId][config.supply];
 			}
 			delete tokenOfConfigByIndex[_data.configId][config.supply];
@@ -295,23 +340,33 @@ contract CoinFlipper is
 		}
 	}
 
+	function _calculateFee(
+		uint256 _amount,
+		uint256 percent
+	) internal pure returns (uint256) {
+		uint256 fee = (_amount * percent) / 100; // This is equivalent to _amount * 0.04
+		return fee;
+	}
+
 	function _takeAsset(CoinFlipConfig storage _config, uint256 _nftId) internal {
 		uint256 configType = _config.tokenType;
 
 		if (configType == 1) {
-			require(msg.value == _config.tokenAmount);
+			require(
+				msg.value == _config.tokenAmount + _calculateFee(_config.tokenAmount, 4)
+			);
 		} else if (configType == 20) {
 			IERC20(_config.tokenAddress).transferFrom(
 				msg.sender,
 				address(this),
-				_config.tokenAmount
+				_config.tokenAmount + _calculateFee(_config.tokenAmount, 4)
 			);
 		} else if (configType == 1155) {
 			IERC1155(_config.tokenAddress).safeTransferFrom(
 				msg.sender,
 				address(this),
 				_config.tokenId,
-				_config.tokenAmount,
+				_config.tokenAmount + _calculateFee(_config.tokenAmount, 4),
 				""
 			);
 		} else if (configType == 721) {

@@ -44,10 +44,10 @@ abstract contract VRFConsumer {
   ) internal virtual returns (bytes32 _reqHash) {
     return
       IRoninVRFCoordinatorForConsumers(vrfCoordinator).requestRandomSeed{ value: _value }(
-        _callbackGasLimit,
-        _gasPriceToFulFill,
-        address(this),
-        _refundAddr
-      );
+      _callbackGasLimit,
+      _gasPriceToFulFill,
+      address(this),
+      _refundAddr
+    );
   }
 }
