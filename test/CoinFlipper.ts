@@ -133,7 +133,7 @@ describe("CoinFlipper", function () {
 					const playerBalance = await ethers.provider.getBalance(player.address);
 					const cfBalance = await ethers.provider.getBalance(await cf.getAddress());
 					await playerCf.flipACoin(true, configId, 0, {
-						value: config.tokenAmount,
+						value: config.tokenAmount + BigInt(calculateFee(config.tokenAmount)),
 					});
 					const newPlayerBalance = await ethers.provider.getBalance(player.address);
 					const newCfBalance = await ethers.provider.getBalance(await cf.getAddress());
@@ -244,6 +244,12 @@ describe("CoinFlipper", function () {
 
 					await mine(Math.floor(Math.random() * 20));
 				}
+
+				// playLog check.
+				const playHistory = await cf.playHistory(player.address);
+				expect(playHistory[0]).to.equal(100);
+
+
 
 				const currentContractBalance = await erc721.balanceOf(await cf.getAddress());
 				const amountContractWon = ethers.getBigInt(contractWins) * config.tokenAmount;
@@ -362,4 +368,8 @@ async function addERC721Config(cf: CoinFlipper, erc721: ERC721, owner: HardhatEt
 
 	expect((await cf.coinFlipConfigs(id)).supply).to.be.equal(config.supply);
 	return id;
+}
+
+function calculateFee (amount: BigInt) {
+	return Number(amount) * 0.04;
 }
